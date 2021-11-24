@@ -3,4 +3,5 @@
 //     query text and running the command:
 //     SFDX: Execute SOQL Query with Currently Selected Text
 
-SELECT Id, Name FROM Account
+List<String> queue_names = new List<String>{'Vip','Gold','Silver'};
+SELECT Id FROM Group WHERE Name IN :queue_names;
