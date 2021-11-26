@@ -1,17 +1,13 @@
 public class EmailManager {
     // Public method
-    public void sendMail(String address, String subject, String body, String[] errors) {
+    public void sendMail(String address, String subject, String body) {
         // Create an email message object
         Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
         String[] toAddresses = new String[] {address};
         mail.setToAddresses(toAddresses);
         mail.setSubject(subject);
 
-        String li_errors = '';
-        for (String e : errors) {
-            li_errors+=e+'\n';
-        }
-        mail.setPlainTextBody('The case information you provided is not correct:'+body+'/n'+li_errors);
+        mail.setPlainTextBody(body);
         // Pass this email message to the built-in sendEmail method 
         // of the Messaging class
         Messaging.SendEmailResult[] results = Messaging.sendEmail(new Messaging.SingleEmailMessage[] { mail });
@@ -37,7 +33,6 @@ public class EmailManager {
                 System.debug('The following errors occurred: ' + res.getErrors());                 
             }
         }
-        
         return sendResult;
     }
 }
