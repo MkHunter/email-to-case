@@ -2,10 +2,10 @@
     Last Edited by Miguel López ~ 29/11/21
 */
 public class CaseTriggerHandler extends TriggerHandler {
-    private List<Case> newCaseMap;
+    private List<Case> newCaseList;
 
     public CaseTriggerHandler() {
-        this.newCaseMap = Trigger.New;
+        this.newCaseList = Trigger.New;
     }
 
     public override void beforeInsert(){
@@ -15,7 +15,7 @@ public class CaseTriggerHandler extends TriggerHandler {
     }
 
     private void maxOpenCases(){
-        List<Case> ncase = newCaseMap;
+        List<Case> ncase = newCaseList;
         for(Case cs: ncase){
             Integer openCases = [SELECT COUNT() FROM CASE WHERE AccountId = :cs.AccountId AND Status <> 'Closed'];
             if(openCases>=5){
@@ -25,7 +25,7 @@ public class CaseTriggerHandler extends TriggerHandler {
     }
 
     private void uniqueSeverity(){
-        Case firstCase = newCaseMap[0];
+        Case firstCase = newCaseList[0];
         
         List<Case> openCases = [SELECT Id, AccountId, Severity__c FROM Case WHERE Status <> 'Closed' AND AccountID = :firstCase.AccountId];
         List<String> useSev = new List<String>();
@@ -54,15 +54,17 @@ public class CaseTriggerHandler extends TriggerHandler {
     class EmailFormatException extends Exception{}
 
     private void receiveEmailToCase(){
-        Case newCase = newCaseMap[0];
-        if (newCase.Origin == 'Email' && Trigger.New.size() < 2) {
+        Case newCase = newCaseList[0];
+        if (newCase.Origin == 'Email' && newCaseList.size() < 2) {
             String plainText = newCase.Description;
             
             String membership, priority, severity;
 
-            List<String> opts_Severity = getValuesFromPicklist(Case.Severity__c);
-            List<String> opts_Membership = getValuesFromPicklist(Case.Membership__c);
-            List<String> opts_Priority = getValuesFromPicklist(Case.Priority);
+            List<String> optsSeverity = getValuesFromPicklist(Case.Severity__c);
+            List<String> optsMembership = getValuesFromPicklist(Case.Membership__c);
+            List<String> optsPriority = getValuesFromPicklist(Case.Priority);
+
+            List<EmailToCaseKnowledgeBase__mdt> fieldsMetadata = new List<EmailToCaseKnowledgeBase__mdt>([SELECT Id, MasterLabel, FieldTokenName__c FROM EmailToCaseKnowledgeBase__mdt]);
 
             try {
                 // Extract data from the Plain Text Email Body
@@ -72,38 +74,31 @@ public class CaseTriggerHandler extends TriggerHandler {
                     String[] emailBodyRows = plainText.split('\n');
                     for (String bodyRow:emailBodyRows) {
                         String[] rowContents = bodyRow.split(':');
-                        String label = rowContents[0].trim().toLowerCase();
-                        String value = rowContents[1].trim();
+                        String proposedLabel = rowContents[0].trim().toLowerCase();
+                        String proposedValue = rowContents[1].trim().toLowerCase();
+
+                        String label = findMetadataTokenOfValue(fieldsMetadata,new List<String>{'Severity','Membership','Priority'}, proposedLabel);
+                        System.debug('proposedLabel : '+proposedLabel+' proposedValue'+proposedValue);
+                        System.debug('LABEL : '+label);
+                        // In case a label = '' then it means it wasn't found in the EmailToCaseKnowledgeBase__mdt object
+                        List<String> searchListOption = new List<String>();
                         switch on label {
                             // TODO Create Exceptions & Reply with an Email to SuppliedEmail
-                            when 'priority' {
-                                //Validate that priority is one of the following values: High, Medium, Low
-                                if (opts_Priority.contains(value)) {
-                                    newCase.Priority = value;
-                                }else {
-                                    // Create exception with CODE: Priority
-                                    throw new EmailFormatException('CODE: Priority');
-                                }
+                            when 'Priority' {
+                                searchListOption = optsPriority;
                             }
-                            when 'severity' {
-                                //Validate that priority is between 1-5
-                                if (opts_Severity.contains(value)) {
-                                    newCase.Severity__c = value;
-                                }else {
-                                    // Create exception with CODE: Severity
-                                    throw new EmailFormatException('CODE: Severity');
-                                }
+                            when 'Severity' {
+                                searchListOption = optsSeverity;
                             }
-                            when 'membership' {
-                                //Validate that priority is one of the following values: Vip, Gold, Silver
-                                if (opts_Membership.contains(value)) {
-                                    newCase.Membership__c = value;
-                                }else {
-                                    // Create exception with CODE: Membership
-                                    throw new EmailFormatException('CODE: Membership');
-                                }
+                            when 'Membership' {
+                                searchListOption = optsMembership;
                             }
                         }
+                        System.debug('ListOption: '+searchListOption);
+                        String value = findMetadataTokenOfValue(fieldsMetadata,searchListOption, proposedValue);
+                        // In case a value = '' then it means it wasn't found in the EmailToCaseKnowledgeBase__mdt object
+                        System.debug('VALUE: '+value);
+                        newCase.Membership__c = value;
                     }
                     // Insert the new Case
                     System.debug('NEW CASE: '+newCase);
@@ -125,11 +120,20 @@ public class CaseTriggerHandler extends TriggerHandler {
     }
 
     private List<String> getValuesFromPicklist(SObjectField field){
-        List<Schema.PicklistEntry> field_Options = field.getDescribe().getPicklistValues();
+        List<Schema.PicklistEntry> fieldOptions = field.getDescribe().getPicklistValues();
         List<String> options = new List<String>();
-        for (Schema.PicklistEntry opt : field_Options) {
+        for (Schema.PicklistEntry opt : fieldOptions) {
             options.add(opt.getValue()); // Turns it into String
         }
         return options;
+    }
+
+    private String findMetadataTokenOfValue(List<EmailToCaseKnowledgeBase__mdt> fieldsMetadata, List<String> fieldTokens, String proposedString){
+        List<String> nFieldsFound = (List<String>) Collection.of(fieldsMetadata)
+                                        .filter(EmailToCaseKnowledgeBase__mdt.FieldTokenName__c).isIn(fieldTokens)
+                                        .filter(EmailToCaseKnowledgeBase__mdt.MasterLabel).equals(proposedString)
+                                        .listOf(EmailToCaseKnowledgeBase__mdt.FieldTokenName__c);
+        System.debug('AAAAAAAAAAAAAAAAAAAAAA: '+nFieldsFound);
+        return nFieldsFound.size() > 0 ? nFieldsFound[0]:'';
     }
 }

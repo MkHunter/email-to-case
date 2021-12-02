@@ -21,7 +21,8 @@ public class EmailMessageTriggerHandler extends TriggerHandler {
             }
         }
         update cases;
-    }        
+    }
+    
     /*
     // Single EmailMessage Logic
     private void updateCaseForwardEmail(){
